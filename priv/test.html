@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<meta charset="utf-8" />
+<title>会场人流实况</title>
+<script type="text/javascript" src="/assets/jquery-2.1.4.min.js"></script>
+<body>
+	<script src="/assets/hightcharts/js/highcharts.js"></script>
+	<script src="/assets/hightcharts/js/modules/exporting.js"></script>
+	<div id="container" style="min-width: 960px; height: 600px; margin: 0 auto"></div>
+	<script type="text/javascript">
+	probe_point = [
+		[0, 0],
+		[0, 19.0],
+		[31.0, 19.0],
+		[31.0, 0]
+	];
+	user_info = {
+		"00:16:3E:02:2B:3C" : {
+			phone : "18788228833",
+		},
+	};
+	$(function () {
+		$('#container').highcharts({
+			chart: {
+				type: 'scatter',
+				zoomType: 'None',
+				spacing: [0,0,0,0],
+				reflow: false,
+				plotBackgroundImage: '',
+				margin: [0,0,0,0],
+			},
+			title: {
+				text: '5.17 会场人流实况'
+			},
+			subtitle: {
+				text: 'by Treebear-P1'
+			},
+			xAxis: {
+				labels: {
+            				enabled: false
+				},
+				gridLineWidth: 0,
+			},
+			yAxis: {
+				title: {
+					text : null
+				},
+				labels: {
+            				enabled:false
+				},
+				gridLineWidth: 0
+			},
+			legend: {
+				enabled: false,
+			},
+			credits:{
+        			enabled: false,
+			},
+			tooltip: {
+				headerFormat: '<span>{series.name} <sub>({point.x:.2f}, {point.y:.2f})</sub></span><br/>',
+				pointFormat: '<b>mac</b> : {point.mac}<br/>' +
+                           		'<b>phone</b> : {point.phone}<br/>',
+				valueDecimals: 2
+			},
+			plotOptions: {
+				series: {
+					animation: {
+						duration: 2000,
+					}
+				},
+				scatter: {
+					states: {
+						hover: {
+							marker: {
+								enabled: true
+							}
+						}
+					},
+				}
+			},
+			series: [{
+				id: 'probe_person',
+				name: '访客',
+				color: 'rgba(238, 83, 83, .5)',
+				data: []
+			},{
+				name : "探针",
+				color: 'black',
+				data: [{
+					x : 0,
+					y : 0,
+					marker: {
+						symbol: 'url(http://www.highcharts.com/demo/gfx/sun.png)'
+					}
+					},
+					{
+						x : 0,
+						y : 19,
+						marker: {
+							symbol: 'url(http://www.highcharts.com/demo/gfx/sun.png)'
+						}
+					},
+					{
+						x : 31,
+						y : 19,
+						marker: {
+							symbol: 'url(http://www.highcharts.com/demo/gfx/sun.png)'
+						}
+					},
+					{
+						x : 31,
+						y : 0,
+						marker: {
+							symbol: 'url(http://www.highcharts.com/demo/gfx/sun.png)'
+						}
+					}]
+			}]
+		});
+	});
+	</script>
+	<script language="javascript" type="text/javascript">
+	function get_position(probe, x0, y0){
+		if(probe == 0){
+			x = probe_point[0][0] + x0;
+			y = probe_point[0][1] + y0
+			return [x, y];
+		}
+	        if(probe == 1){
+			x = probe_point[1][0] + x0;
+			y = probe_point[1][1] - y0;
+			return [x,y];
+		}
+		if(probe == 2) {
+			x = probe_point[2][0] - x0;
+			y = probe_point[2][1] - y0;
+			return [x,y];
+		}
+		if(probe == 3) {
+			x = probe_point[3][0] - x0;
+			y = probe_point[3][1] + y0;
+			return [x,y];
+		} 
+		return [-1 , -1];
+	}
+	var wsUri ="ws://127.0.0.1:8080/treebear/spark";
+	var output;
+	function init() {
+		testWebSocket();
+	}
+	function testWebSocket() {
+		websocket = new WebSocket(wsUri);
+		websocket.onopen = function(evt) {
+			onOpen(evt)
+		};
+		websocket.onclose = function(evt) {
+			onClose(evt)
+		};
+		websocket.onmessage = function(evt) {
+			onMessage(evt)
+		};
+		websocket.onerror = function(evt) {
+			onError(evt)
+		};
+	}
+	function onOpen(evt) {
+		loadInitailData(evt);
+	}
+	function onClose(evt) {
+	}
+
+	function loadInitailData() {
+		doSend(JSON.stringify({action : "loadInitailData"}));
+	}
+	function onMessage(evt) {
+		chart = $('#container').highcharts();
+
+		eval('evtData = ' + evt.data);
+		if(evtData.action == "totalData"){
+			do_total_refresh(evtData.data);
+			return;
+		}
+		if(evtData.action == "incData") {
+			do_inc_refresh(evtData.data);
+			return;
+		}
+	}
+	function do_total_refresh(totalData){
+		series = chart.series[0];
+		totalData.forEach(function(Item){
+			console.log("initail :" + Item);
+			var devMac = Item[0];
+			var P = get_position(Item[1], Item[2], Item[3]);
+			series.addPoint({
+				x : P[0],
+				y : P[1],
+				id : devMac,
+				mac : devMac
+			},true);
+		});
+	}
+	function do_inc_refresh(data){
+		devMac = data.devMac;
+		type = data.type;
+		if(type == "leave"){
+			point = chart.get(devMac);
+			if(point != null && point != undefined){
+				point.remove(true);
+			}
+			return;			
+		}
+		
+		probeNo = data.probeNo;
+		x = data.x;
+		y = data.y;
+		console.log(data);
+		series = chart.series[0];
+		Position = get_position(probeNo, x,y);
+		console.log("get position : " + probeNo + " (" +  x + "," + y + ")");
+		if(type == "new"){
+			if(chart.get(devMac) != undefined){
+				console.log("oops, inconsistant");
+				point.remove(true);
+			}
+			series.addPoint({
+				x : Position[0],
+				y : Position[1],
+				id : devMac,
+				mac : devMac,
+				phone : user_info[devMac]
+				
+			},true);
+			Point = chart.get(devMac);
+			Point.setState('hover');
+			chart.tooltip.refresh(Point);
+			return;
+		}
+
+		if(type == "move"){
+			console.log("try to remove from old probe");
+			oldPoint = chart.get(devMac);
+			if(oldPoint != undefined) {
+				oldPoint.remove(true);
+			}
+			series.addPoint({
+				x : Position[0],
+				y : Position[1],
+				id : devMac,
+				mac : devMac,
+				phone : user_info[devMac]
+			},true);
+			Point = chart.get(devMac);
+			Point.setState('hover');
+			chart.tooltip.refresh(Point);
+		}
+	}
+	function onError(evt) {
+	}
+	function doSend(message) {
+		websocket.send(message);
+	}
+	function writeToScreen(message) {
+	}
+	window.addEventListener("load", init, false);
+	</script>
+</body>
+</html>

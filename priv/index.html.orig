@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<meta charset="utf-8" />
+<title>会场人流实况</title>
+<script type="text/javascript" src="/assets/jquery-2.1.4.min.js"></script>
+<style>
+.probe-img {
+	-webkit-animation:spin 2s linear infinite;
+	-moz-animation:spin 2s linear infinite;
+	animation:spin 2s linear infinite;
+}
+
+#query-user:hover{
+	color: white;
+	border: 1px solid white;
+}
+#query-user:focus{
+	outline-style:none;
+}
+#query-user{
+	border: 0;
+	width: 50%;
+	color: grey;
+	padding: .5em;
+	margin:auto;
+	margin-top: 2em;
+	font-size:1em;
+	background-color: black;
+}
+@-moz-keyframes spin { 100% { -moz-transform: rotate(360deg); } }
+@-webkit-keyframes spin { 100% { -webkit-transform: rotate(360deg); } }
+@keyframes spin { 100% { -webkit-transform: rotate(360deg); transform:rotate(360deg); } }
+</style>
+<body style="background-color:black">
+	<script src="/assets/hightcharts/js/highcharts.js"></script>
+	<div><input style="display:block" id="query-user" type="text"/></div>
+	<div style="position:fixed;top:50%;margin-top:-300px;">
+		<div style="position:relative;">
+			<div id="container" style="width: 100%;height: 600px; "></div>
+			<img class="probe-img" style="position:absolute;top:-10px;left:-20px;width:110px;" src="assets/sniffer.gif">
+			<img class="probe-img" style="position:absolute;bottom:-10px;left:-20px;width:110px;" src="assets/sniffer.gif">
+			<img class="probe-img" style="position:absolute;top:-10px;right:-20px;width:110px;" src="assets/sniffer.gif">
+			<img class="probe-img" style="position:absolute;bottom:-10px;right:-20px;width:110px;" src="assets/sniffer.gif">
+			<div id="CounterContainer" style="position:absolute; right:45%;
+							  margin-top: 1em;
+							  font-size:.8em;
+							  border-color:rgba(127, 228, 255, 0.84);
+							  color: rgb(118,198,253);">当前人数：<span id="totalCounter">0</span>
+			</div>			
+		</div>
+	</div>
+
+	<script type="text/javascript">
+	mac_filter_map = {
+		"10:41:7F:36:9B:D9" : 1,
+		"FC:E9:98:3E:24:37" : 1,
+		"E0:B5:2D:54:58:3A" : 1,
+		"28:E3:1F:A9:78:F1" : 1,
+	};
+	probe_point = [
+		[0,0],
+		[0,19],
+		[31,19],
+		[31,0]
+	];
+	/**
+	   状态变量
+	 **/
+	state_do_query = false;
+	query_prefix = "";
+	/**
+	   将设备设置为激活状态
+	 **/
+	function do_query_highlight(){
+		query_prefix = $('#query-user').val();
+		if(query_prefix == ""){
+			do_query_unhighlight();
+			return;
+		}
+		seriesMale.data.forEach(function(Point){
+			if(Point.mac.indexOf(query_prefix) == 0){
+				chart.tooltip.refresh(Point);
+				if(Point.cloneToolTip == undefined){
+					var cloneToolTip = Point.series.chart.tooltip.label.element.cloneNode(true);
+					chart.container.firstChild.appendChild(cloneToolTip);
+					Point.cloneToolTip = cloneToolTip;
+					chart.tooltip.hide(Point);
+				}
+			}else{
+				if(Point.cloneToolTip != undefined){
+					$(Point.cloneToolTip).remove();
+					Point.cloneToolTip = undefined;
+				}
+				Point.onMouseOut();
+			}
+		});
+		seriesFemale.data.forEach(function(Point){
+			if(Point.mac.indexOf(query_prefix) == 0){
+				chart.tooltip.refresh(Point);
+				if(Point.cloneToolTip == undefined){
+					var cloneToolTip = Point.series.chart.tooltip.label.element.cloneNode(true);
+					chart.container.firstChild.appendChild(cloneToolTip);
+					Point.cloneToolTip = cloneToolTip;
+					chart.tooltip.hide(Point);
+				}
+			}else{
+				if(Point.cloneToolTip != undefined){
+					$(Point.cloneToolTip).remove();
+					Point.cloneToolTip = undefined;
+				}
+				Point.onMouseOut();
+			}
+		});
+	}
+	/**
+	   取消查询状态被激活的设备
+	 **/
+	function do_query_unhighlight(){
+		seriesMale.data.forEach(function(Point){
+			if(Point.mac.indexOf(query_prefix) == 0){
+				if(Point.cloneToolTip != undefined){
+					$(Point.cloneToolTip).remove();
+					Point.cloneToolTip = undefined;
+				}
+			}
+		});
+		seriesFemale.data.forEach(function(Point){
+			if(Point.mac.indexOf(query_prefix) == 0){
+				if(Point.cloneToolTip != undefined){
+					$(Point.cloneToolTip).remove();
+					Point.cloneToolTip = undefined;
+				}
+			}
+		});
+	}
+	$(function () {
+		if(window.location.href.search("sex=true") != -1){
+			enable_sex = true;
+		}else{
+			enable_sex = false;
+		}
+		d_min = 1;
+		try{
+		var d_min_ = window.location.href.match("d_min=[0-9]+");
+		if(d_min_ != undefined){
+			d_min = parseInt(d_min_[0].split("=")[1]);
+		}
+		}catch(err){
+			console.log(err);
+		}
+		
+		d_max_x = 30;
+		try{
+			var d_max_x_ = window.location.href.match("d_max_x=[0-9]+");
+			if(d_max_x_ != undefined){
+				d_max_x = parseInt(d_max_x_[0].split("=")[1]);
+			}
+		}catch(err){
+			console.log(err);
+		}
+		
+		d_max_y = 18;
+		try{
+			var d_max_y_ = window.location.href.match("d_max_y=[0-9]+");
+			if(d_max_y_ != undefined){
+				d_max_y = parseInt(d_max_y_[0].split("=")[1]);
+			}
+		}catch(err){
+			console.log(err);
+		}
+		$('#container').highcharts({
+			chart: {
+				color: 'rgb(45,199,255)',
+				type: 'scatter',
+				zoomType: 'None',
+				spacing: [0,0,0,0],
+				reflow: false,
+				plotBackgroundImage: '/assets/517-background.jpg',
+				plotBackgroundColor: "rgb(5,4,4)",
+				backgroundColor: "rgb(5,4,4)",
+				margin: [0,0,0,0]
+			},
+			exporting: { enabled: false },
+			title: {
+				text: '5.17 会场人流实况',
+				style: { "color": 'white', "background-color" : "rgb(5,4,4)" },
+			},
+			subtitle: {
+				text: 'by Treebear-P1',
+				style: { "color": 'white', "background-color" : "rgb(5,4,4)" },
+			},
+			xAxis: {
+				labels: {
+            				enabled: false
+				},
+				gridLineWidth: 0,
+			},
+			yAxis: {
+				title: {
+					text : null
+				},
+				labels: {
+            				enabled:false
+				},
+				gridLineWidth: 0
+			},
+			legend: {
+				enabled: false,
+			},
+			credits:{
+        			enabled: false,
+			},
+			tooltip: {
+				share: false,
+				formatter: function() {
+					var title; 
+					if(enable_sex){
+						var s1;
+						if(this.point.sex == "female"){
+							s1 = '♀';
+						}else{
+							s1 = '♂';
+						}
+						if(this.point.name != undefined) {
+							title = '<storng>' + s1 + ' ' + this.series.name + '</storng>  ' + this.point.name + '<br/>';
+						}else{
+							title = '<storng>' + s1 + ' ' + this.series.name + '</storng> <br/>';
+						}
+					}else{
+						if(this.point.name != undefined) {
+							title = '<storng>' + this.series.name + '</storng> ' + this.point.name + '<br/>';
+						}else{
+							title = '<storng>' + this.series.name + '</storng><br/>';
+						}
+					}
+					title += '<strong>♛ ：</strong>' + this.point.mac + '<br/>';
+					if(this.point.phone != undefined) {
+                           			title += '<strong>☎ ：</strong>' + this.point.phone + '<br/>';
+					}
+					return title;
+				},
+				backgroundColor: 'rgba(255,255,255,.5)',
+				valueDecimals: 2
+			},
+			plotOptions: {
+				series: {
+					animation: {
+						duration: 2000,
+					},
+					marker: {
+						states: {
+							hover: {
+								radius: 5,
+								lineColor: "white",
+							},
+							select: {
+								radius: 5,
+								lineColor: "white",
+							}
+						}
+					},
+				},
+			},
+			series: [
+				{
+					id: 'male',
+					name: enable_sex ? '男顾客' : "顾客",
+					color: 'rgba(45,199,255, .5)',
+					data: [],
+					marker: {
+						symbol: "circle",
+						fillColor: "rgb(45,199,255)",
+						lineColor: "rgb(45,199,255)",
+					},
+				},{
+					id: 'female',
+					name: enable_sex ? '女顾客' : "顾客",
+					color: enable_sex ? 'rgba(179,76,78, .5)' : 'rgba(45,199,255, .5)',
+					data: [],
+					marker: {
+						symbol: "circle",
+						fillColor: enable_sex ? "rgb(179,76,78)" : 'rgba(45,199,255, .5)',
+						lineColor: enable_sex ? "rgb(179,76,78)" : 'rgba(45,199,255, .5)',
+					},
+				
+				},{
+					name: "探针",
+					color: 'black',
+					marker: {
+						enabled: false
+					},
+					data: [{
+						x : 0,
+						y : 0,
+					},{
+						x : 0,
+						y : 19,
+					},{
+						x : 31,
+						y : 19,
+					},{
+						x : 31,
+						y : 0,
+					}]
+				}
+			]
+		});
+		/**
+                   注册搜索框处理函数
+		 **/
+		$('#query-user').focus(function(){
+			if(state_do_query) return;
+			state_do_query = true;
+			do_query_highlight();
+		});
+		$('#query-user').on("input",function(e){
+			do_query_highlight();
+		});
+		$('#query-user').blur(function(){
+			state_do_query = false;
+			do_query_unhighlight();
+		});
+	});
+	</script>
+	<script language="javascript" type="text/javascript">
+	function regular_position(x, y) {
+		x0 = x <= d_min ? d_min + (Math.round(Math.random()*1000)/1000) : (x >= d_max_x ? d_max_x - (Math.round(Math.random()*1000)/1000) : x);
+		y0 = y <= d_min ? d_min + (Math.round(Math.random()*1000)/1000) : (y >= d_max_y ? d_max_y - (Math.round(Math.random()*1000)/1000) : y);
+		return [ x0 , y0 ];
+	}
+	function get_position(probe, x0, y0){
+		if(probe == 0){
+			x = probe_point[0][0] + x0;
+			y = probe_point[0][1] + y0
+			return regular_position(x,y);
+		}
+	        if(probe == 1){
+			x = probe_point[1][0] + x0;
+			y = probe_point[1][1] - y0;
+			return regular_position(x,y);
+		}
+		if(probe == 2) {
+			x = probe_point[2][0] - x0;
+			y = probe_point[2][1] - y0;
+			return regular_position(x,y);
+		}
+		if(probe == 3) {
+			x = probe_point[3][0] - x0;
+			y = probe_point[3][1] + y0;
+			return regular_position(x,y);
+		} 
+		return [-1 , -1];
+	}
+//	var wsUri ="ws://127.0.0.1:8080/treebear/spark";
+	var wsUri ="ws://112.124.3.87:8080/treebear/spark";
+	var output;
+	function init() {
+		testWebSocket();
+	}
+	function testWebSocket() {
+		websocket = new WebSocket(wsUri);
+		websocket.onopen = function(evt) {
+			onOpen(evt)
+		};
+		websocket.onclose = function(evt) {
+			onClose(evt)
+		};
+		websocket.onmessage = function(evt) {
+			onMessage(evt)
+		};
+		websocket.onerror = function(evt) {
+			onError(evt)
+		};
+	}
+	function onOpen(evt) {
+		loadInitailData(evt);
+	}
+	function onClose(evt) {
+	}
+	function loadInitailData() {
+		doSend(JSON.stringify({action : "loadInitailData"}));
+	}
+	function onMessage(evt) {
+		chart = $('#container').highcharts();
+
+		eval('evtData = ' + evt.data);
+		if(evtData.action == "totalData"){
+			do_total_refresh(evtData.data);
+			return;
+		}
+		if(evtData.action == "incData") {
+			do_inc_refresh(evtData.data);
+			return;
+		}
+	}
+	renderTotalCount = (function (){
+		var totalCount = 0;
+		return function (add){
+			if(add){
+				totalCount +=1;
+			}else{
+				totalCount -=1;
+			}
+			$('#totalCounter').text(totalCount);
+		}
+	})();
+	function do_total_refresh(totalData){
+		seriesMale = chart.series[0];
+		seriesFemale = chart.series[1];
+		totalData.forEach(function(Item){
+			console.log("initail :" + Item);
+			var devMac = Item[0];
+			// TODO: remove after test
+//			if(mac_filter_map[devMac] == undefined) {
+//				return;
+			//			}
+			var P = get_position(Item[1], Item[2], Item[3]);
+			if(P[0] == -1 || P[1] == -1) {
+				return;
+			}
+			the_user_info = user_info[devMac];
+			phoneNo = the_user_info == undefined ? undefined : the_user_info.phone;
+			sex = the_user_info == undefined ? "female" : the_user_info.sex;
+			user_name = the_user_info == undefined ? undefined : the_user_info.name;
+			if(sex == "female"){
+				seriesFemale.addPoint({
+					x : P[0],
+					y : P[1],
+					id : devMac,
+					mac : devMac,
+					phone : phoneNo,
+					sex : sex,
+					name : user_name,
+				},true);
+			}else{
+				seriesMale.addPoint({
+					x : P[0],
+					y : P[1],
+					id : devMac,
+					mac : devMac,
+					phone : phoneNo,
+					sex : sex,
+					name : user_name,
+				},true);
+			}
+			renderTotalCount(true);
+		});
+	}
+	function add_new_point(Point){
+		if(sex == "female"){
+			seriesFemale.addPoint(Point, true);
+		}else{
+			seriesMale.addPoint(Point, true);
+		}
+		if(state_do_query){
+			if(devMac.indexOf(query_prefix) == 0 ){
+				chart.tooltip.refresh(Point);
+				var cloneToolTip = Point.series.chart.tooltip.label.element.cloneNode(true);
+				chart.container.firstChild.appendChild(cloneToolTip);
+				Point.cloneToolTip = cloneToolTip;
+				chart.tooltip.hide(Point);
+			}
+		}else{
+			Point = chart.get(devMac);
+			Point.setState('hover');
+			chart.tooltip.refresh(Point);
+		}
+		renderTotalCount(true);			
+
+	}
+	function move_point(OldPoint, Position){
+		OldPoint.update([Position[0], Position[1]],true,true);
+		if(state_do_query){
+			if(OldPoint.cloneToolTip != undefined){
+				chart.tooltip.refresh(Point);
+				$(OldPoint.cloneToolTip).remove();
+				var cloneToolTip = Point.series.chart.tooltip.label.element.cloneNode(true);
+				chart.container.firstChild.appendChild(cloneToolTip);
+				OldPoint.cloneToolTip = cloneToolTip;
+				chart.tooltip.hide(Point);
+			}
+		}else{
+			var Point = chart.get(devMac);
+			Point.setState('hover');
+			chart.tooltip.refresh(Point);
+		}
+		
+	}
+	function do_inc_refresh(data){
+		devMac = data.devMac;
+		// TODO: remove after test
+//		if(mac_filter_map[devMac] == undefined) {
+//			return;
+//		}
+		type = data.type;
+		if(type == "leave"){
+			var OldPoint = chart.get(devMac);
+			if(OldPoint != null && OldPoint != undefined){
+				if(OldPoint.cloneToolTip != undefined){
+					OldPoint.cloneToolTip.remove();
+				}
+				OldPoint.remove(true);
+				renderTotalCount(false);
+			}
+			return;			
+		}
+		
+		probeNo = data.probeNo;
+		x = data.x;
+		y = data.y;
+		console.log(data);
+		seriesMale = chart.series[0];
+		seriesFemale = chart.series[1];
+		Position = get_position(probeNo, x,y);
+		if(Position[0] == -1 || Position[1] == -1) {
+			return;
+		}
+		console.log("get position : " + probeNo + " (" +  x + "," + y + ")");
+		the_user_info = user_info[devMac];
+		phoneNo = the_user_info == undefined ? undefined : the_user_info.phone;
+		sex = the_user_info == undefined ? "female" : the_user_info.sex;
+		user_name = the_user_info == undefined ? undefined : the_user_info.name;
+		if(type == "new"){
+			var OldPoint = chart.get(devMac);
+			if(OldPoint != undefined){
+				console.log("oops, inconsistant, do move");
+				move_point(OldPoint, Position);
+				return;
+			}
+			Point = {
+				x : Position[0],
+				y : Position[1],
+				id : devMac,
+				mac : devMac,
+				phone : phoneNo,
+				sex : sex,
+				name : user_name,
+			};
+			add_new_point(Point);
+			return;
+		}
+
+		if(type == "move"){
+			var Point = {
+				x : Position[0],
+				y : Position[1],
+				id : devMac,
+				mac : devMac,
+				phone : phoneNo,
+				sex : sex,
+			};
+			console.log("try to remove from old probe");
+			var OldPoint = chart.get(devMac);
+			if(OldPoint == undefined) {
+				add_new_point(Point);
+				return;
+			}
+			move_point(OldPoint, Position);
+		}
+	}
+	function onError(evt) {
+	}
+	function doSend(message) {
+		websocket.send(message);
+	}
+	function writeToScreen(message) {
+	}
+	window.addEventListener("load", init, false);
+	</script>
+</body>
+</html>

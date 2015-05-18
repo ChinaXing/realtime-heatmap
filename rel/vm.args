@@ -1,0 +1,4 @@
+-name cat@lambda.net
+-setcookie 12345
+-heart
+-mnesia dir '"/Users/LambdaCat/code/erlang/hello_erlang/t/cat@lambda.net"'
